@@ -1,0 +1,14 @@
+services:
+  service1:
+    restart: always
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - mode: ingress
+        target: 5000
+        published: 5000
+    environment:
+      - OPENCV_API_KEY
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
