@@ -32,8 +32,13 @@ def upload_file():
     if file.filename == '':
         return "No selected file", 400
     
-    preprocess_image(file)
-    print("Image processed", file)
+    try:
+        processed=preprocess_image(file)
+        print("Image processed", processed)
+        cv2.imwrite("processed.png", processed)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    
 
 
     # Process the image and generate .ics files
