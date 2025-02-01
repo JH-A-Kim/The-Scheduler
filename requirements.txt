@@ -3,3 +3,4 @@ flask
 opencv-python-headless
 numpy
 ics
+pytesseract
