@@ -10,13 +10,20 @@ from datetime import datetime
 # #must use subdomain
 app = Flask(__name__)
 
-def preprocess_image(image_path):
-    img = cv2.imread(image_path)
+def preprocess_image(file):
+    file_bytes = np.frombuffer(file.read(), np.uint8)
+
+    # Decode the image using OpenCV
+    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+
+    if img is None:
+        raise ValueError("Could not decode image")
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
     thresh = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                    cv2.THRESH_BINARY_INV, 11, 2)
     return thresh
+
 @app.route("/upload", methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
@@ -25,9 +32,9 @@ def upload_file():
     if file.filename == '':
         return "No selected file", 400
     
-    # Read the image via OpenCV
-    file_bytes = np.frombuffer(file.read(), np.uint8)
-    img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+    preprocess_image(file)
+    print("Image processed", file)
+
 
     # Process the image and generate .ics files
     # This is a placeholder for actual image processing logic
