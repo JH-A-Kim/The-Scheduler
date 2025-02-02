@@ -8,6 +8,7 @@ import openai
 from dotenv import load_dotenv
 import io
 from ics.grammar.parse import ContentLine
+import pytz
 
 
 app = Flask(__name__)
@@ -93,7 +94,7 @@ def parse_schedule_via_chatgpt(table_data):
         f"{json.dumps(table_data, indent=2)}\n\n"
         "Convert this into a JSON array of schedule entries with the following keys: "
         '"course", "day", "start_time", "end_time", and "location". '
-        "Output only valid JSON some of the information may be disorganized so account for that and also keep an eye on the start and end times, make sure that the start_time is before the end_time. like for example 4:20 PM is after 2:30 PM so we would would want 2:30 as the start time and 4:20 as the end time. And remember to not add anything like markdown fences to mark it as code I want it purely as json."
+        "Output only valid JSON some of the information may be disorganized so account for that and also keep an eye on the start and end times, make sure that the start_time is before the end_time. like for example 4:20 PM is after 2:30 PM so we would would want 2:30 as the start time and 4:20 as the end time. And remember to not add anything like markdown fences to mark it as code I want it purely as json. And include the course number in the course name"
     )
 
     response = openai.chat.completions.create(model="gpt-3.5-turbo",
@@ -148,6 +149,8 @@ def upload_file():
 
         semester_start=SEMESTER_START_DATE
 
+        pst=pytz.timezone('US/Pacific')
+
         for entry in schedule:
             day_list = extract_days(entry["day"])
             for day_abbr in day_list:
@@ -158,11 +161,14 @@ def upload_file():
                 days_ahead = (target_weekday - semester_start.weekday()) % 7
                 event_date = semester_start + timedelta(days=days_ahead)
 
+                days_ahead = (target_weekday - semester_start.weekday()) % 7
+                event_date = semester_start + timedelta(days=days_ahead)
+
                 start_time = datetime.strptime(entry["start_time"], "%I:%M %p").time()
                 end_time = datetime.strptime(entry["end_time"], "%I:%M %p").time()
 
-                start_dt = datetime.combine(event_date.date(), start_time)
-                end_dt = datetime.combine(event_date.date(), end_time)
+                start_dt = pst.localize(datetime.combine(event_date.date(), start_time))
+                end_dt = pst.localize(datetime.combine(event_date.date(), end_time))
 
 
                 event = Event(
@@ -172,6 +178,12 @@ def upload_file():
                     location=entry["location"]
                 )
                 event.extra.append(ContentLine(name="RRULE", params={}, value="FREQ=WEEKLY"))
+                event.extra.append(ContentLine(name="BEGIN", params={}, value="VALARM"))
+                event.extra.append(ContentLine(name="TRIGGER", params={}, value=f"-PT15M"))
+                event.extra.append(ContentLine(name="ACTION", params={}, value="DISPLAY"))
+                event.extra.append(ContentLine(name="DESCRIPTION", params={}, value=f"Reminder: {entry['course']} starts soon!"))
+                event.extra.append(ContentLine(name="END", params={}, value="VALARM"))
+                
 
                 cal.events.add(event)
 
