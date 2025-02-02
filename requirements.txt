@@ -1,7 +1,6 @@
-uwsgi
-flask
-opencv-python-headless
-numpy
+Flask
+google-cloud-vision
 ics
-pytesseract
-easyocr
+openai
+python-dotenv
+pytz
