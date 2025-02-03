@@ -16,12 +16,11 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
+load_dotenv()
 google_credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
 credentials = service_account.Credentials.from_service_account_info(eval(google_credentials_json))
 
 vision_client = vision.ImageAnnotatorClient()
-
-load_dotenv()
 DAYS_MAPPING = {
     "M": 0, "Tu": 1, "W": 2, "Th": 3, "F": 4
 }
