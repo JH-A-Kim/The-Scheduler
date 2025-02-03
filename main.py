@@ -9,9 +9,11 @@ from dotenv import load_dotenv
 import io
 from ics.grammar.parse import ContentLine
 import pytz
+from flask_cors import CORS
 
 
 app = Flask(__name__)
+CORS(app)
 vision_client = vision.ImageAnnotatorClient()
 
 load_dotenv()

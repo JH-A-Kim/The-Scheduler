@@ -1,4 +1,5 @@
 Flask
+gunicorn
 google-cloud-vision
 ics
 openai
