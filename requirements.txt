@@ -5,3 +5,4 @@ ics
 openai
 python-dotenv
 pytz
+flask-cors
