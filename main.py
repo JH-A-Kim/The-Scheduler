@@ -2,6 +2,7 @@ import os
 from flask import Flask, request, jsonify, send_file
 from google.cloud import vision
 from ics import Calendar, Event
+from google.oauth2 import service_account
 from datetime import datetime, timedelta
 import json
 import openai
@@ -14,6 +15,10 @@ from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app)
+
+google_credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
+credentials = service_account.Credentials.from_service_account_info(eval(google_credentials_json))
+
 vision_client = vision.ImageAnnotatorClient()
 
 load_dotenv()
