@@ -26,8 +26,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . /app
 
 # Make port 5001 available to the world outside this container
-EXPOSE ${PORT}
+EXPOSE 5001
 
 # Run main when the container launches
-ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:${PORT}", "main:app"]
+ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:5001", "main:app"]
 USER nobody
