@@ -1,8 +1,8 @@
 Flask
-gunicorn
 google-cloud-vision
 ics
 openai
 python-dotenv
-pytz
+requests
 flask-cors
+pytz

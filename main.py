@@ -2,7 +2,6 @@ import os
 from flask import Flask, request, jsonify, send_file
 from google.cloud import vision
 from ics import Calendar, Event
-from google.oauth2 import service_account
 from datetime import datetime, timedelta
 import json
 import openai
@@ -11,16 +10,16 @@ import io
 from ics.grammar.parse import ContentLine
 import pytz
 from flask_cors import CORS
+import base64
+import requests
 
 
 app = Flask(__name__)
 CORS(app)
 
 load_dotenv()
-google_credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON")
-credentials = service_account.Credentials.from_service_account_info(eval(google_credentials_json))
+API_KEY = os.getenv("GOOGLE_API_KEY")
 
-vision_client = vision.ImageAnnotatorClient()
 DAYS_MAPPING = {
     "M": 0, "Tu": 1, "W": 2, "Th": 3, "F": 4
 }
@@ -29,36 +28,54 @@ today=datetime.today()
 SEMESTER_START_DATE=today-timedelta(days=today.weekday())
 
 def extract_table_from_image(image_bytes):
-    image = vision.Image(content=image_bytes)
-    response = vision_client.text_detection(image=image)
+    # Convert image to base64
+    encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+    
+    # Prepare the request payload
+    request_payload = {
+        "requests": [
+            {
+                "image": {"content": encoded_image},
+                "features": [{"type": "TEXT_DETECTION"}]
+            }
+        ]
+    }
 
-    if response.error.message:
-        raise Exception(f"Google Vision API error: {response.error.message}")
+    # Google Vision API URL with API Key
+    vision_api_url = f"https://vision.googleapis.com/v1/images:annotate?key={API_KEY}"
+
+    # Make the POST request
+    response = requests.post(vision_api_url, json=request_payload)
+
+    if response.status_code != 200 or 'error' in response.json():
+        raise Exception(f"Google Vision API error: {response.json().get('error', {}).get('message', 'Unknown error')}")
 
     words_with_positions = []
-
-    for page in response.full_text_annotation.pages:
-        for block in page.blocks:
-            for paragraph in block.paragraphs:
-                for word in paragraph.words:
-                    word_text = ''.join([symbol.text for symbol in word.symbols])
+    
+    # Parse the response
+    for page in response.json()['responses'][0].get('fullTextAnnotation', {}).get('pages', []):
+        for block in page.get('blocks', []):
+            for paragraph in block.get('paragraphs', []):
+                for word in paragraph.get('words', []):
+                    word_text = ''.join([symbol['text'] for symbol in word['symbols']])
                     word_info = {
                         'text': word_text,
-                        'bounding_box': word.bounding_box
+                        'bounding_box': word['boundingBox']['vertices']
                     }
                     words_with_positions.append(word_info)
 
     return words_with_positions
 
 def group_words_into_table(words_with_positions, row_threshold=30, cell_threshold=30):
-    words_with_positions.sort(key=lambda x: min(v.y for v in x['bounding_box'].vertices))
+    # Sort words based on the y-coordinate (top of the bounding box)
+    words_with_positions.sort(key=lambda x: min(v['y'] for v in x['bounding_box'] if 'y' in v))
 
     rows = []
     current_row = []
     prev_y = None
 
     for word_info in words_with_positions:
-        y = min(v.y for v in word_info['bounding_box'].vertices)
+        y = min(v['y'] for v in word_info['bounding_box'] if 'y' in v)
         if prev_y is None or abs(y - prev_y) < row_threshold:
             current_row.append(word_info)
         else:
@@ -70,14 +87,15 @@ def group_words_into_table(words_with_positions, row_threshold=30, cell_threshol
 
     table = []
     for row in rows:
-        row.sort(key=lambda word: min(v.x for v in word['bounding_box'].vertices))
+        # Sort words based on the x-coordinate (left of the bounding box)
+        row.sort(key=lambda word: min(v['x'] for v in word['bounding_box'] if 'x' in v))
         cells = []
         current_cell = [row[0]]
-        current_cell_left = min(v.x for v in row[0]['bounding_box'].vertices)
+        current_cell_left = min(v['x'] for v in row[0]['bounding_box'] if 'x' in v)
         last_x = current_cell_left 
 
         for word in row[1:]:
-            x = min(v.x for v in word['bounding_box'].vertices)
+            x = min(v['x'] for v in word['bounding_box'] if 'x' in v)
             if x - last_x > cell_threshold:
                 cell_text = " ".join([w['text'] for w in current_cell])
                 cells.append(cell_text)
@@ -93,6 +111,72 @@ def group_words_into_table(words_with_positions, row_threshold=30, cell_threshol
         table.append(cells)
 
     return table
+
+# def extract_table_from_image(image_bytes):
+#     image = vision.Image(content=image_bytes)
+#     response = vision_client.text_detection(image=image)
+
+#     if response.error.message:
+#         raise Exception(f"Google Vision API error: {response.error.message}")
+
+#     words_with_positions = []
+
+#     for page in response.full_text_annotation.pages:
+#         for block in page.blocks:
+#             for paragraph in block.paragraphs:
+#                 for word in paragraph.words:
+#                     word_text = ''.join([symbol.text for symbol in word.symbols])
+#                     word_info = {
+#                         'text': word_text,
+#                         'bounding_box': word.bounding_box
+#                     }
+#                     words_with_positions.append(word_info)
+
+#     return words_with_positions
+
+# def group_words_into_table(words_with_positions, row_threshold=30, cell_threshold=30):
+#     words_with_positions.sort(key=lambda x: min(v.y for v in x['bounding_box'].vertices))
+
+#     rows = []
+#     current_row = []
+#     prev_y = None
+
+#     for word_info in words_with_positions:
+#         y = min(v.y for v in word_info['bounding_box'].vertices)
+#         if prev_y is None or abs(y - prev_y) < row_threshold:
+#             current_row.append(word_info)
+#         else:
+#             rows.append(current_row)
+#             current_row = [word_info]
+#         prev_y = y
+#     if current_row:
+#         rows.append(current_row)
+
+#     table = []
+#     for row in rows:
+#         row.sort(key=lambda word: min(v.x for v in word['bounding_box'].vertices))
+#         cells = []
+#         current_cell = [row[0]]
+#         current_cell_left = min(v.x for v in row[0]['bounding_box'].vertices)
+#         last_x = current_cell_left 
+
+#         for word in row[1:]:
+#             x = min(v.x for v in word['bounding_box'].vertices)
+#             if x - last_x > cell_threshold:
+#                 cell_text = " ".join([w['text'] for w in current_cell])
+#                 cells.append(cell_text)
+#                 current_cell = [word]
+#                 current_cell_left = x
+#                 last_x = x
+#             else:
+#                 current_cell.append(word)
+#                 last_x = x
+#         if current_cell:
+#             cell_text = " ".join([w['text'] for w in current_cell])
+#             cells.append(cell_text)
+#         table.append(cells)
+
+#     return table
 
 def parse_schedule_via_chatgpt(table_data):
     prompt = (
